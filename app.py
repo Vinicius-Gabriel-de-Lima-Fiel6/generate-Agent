@@ -3,72 +3,80 @@ from groq import Groq
 import requests
 from supabase import create_client
 import json
+import threading
+import time
 
-# --- SETUP ---
-st.set_page_config(page_title="IA Agent Builder", page_icon="🤖", layout="wide")
+# --- CONFIGURAÇÕES E CONEXÕES ---
+st.set_page_config(page_title="AI Agent Factory Pro", layout="wide")
 
-# Inicializa Supabase e Groq
-supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+# Inicializa Supabase (mesma configuração anterior)
+if "supabase" not in st.session_state:
+    url: str = st.secrets["SUPABASE_URL"]
+    key: str = st.secrets["SUPABASE_KEY"]
+    st.session_state.supabase = create_client(url, key)
+
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-st.title("🤖 Construtor Automático de Agentes")
-st.markdown("---")
+# Estado para monitorar agentes em tempo real nesta sessão
+if "agentes_ativos" not in st.session_state:
+    st.session_state.agentes_ativos = {}
 
-# Interface de Entrada
-col1, col2 = st.columns([2, 1])
+# --- MOTOR DE EXECUÇÃO DO AGENTE ---
+def worker_agente(nome, prompt_ia, intervalo, numero, api_url):
+    """Função que roda em background para enviar as mensagens"""
+    while st.session_state.agentes_ativos.get(nome, False):
+        try:
+            # IA gera a mensagem dinâmica baseada na personalidade
+            chat = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "system", "content": prompt_ia},
+                          {"role": "user", "content": "Gere a mensagem de agora."}]
+            )
+            msg_texto = chat.choices[0].message.content
+            
+            # Envio real para o WhatsApp (Sua API)
+            requests.post(api_url, json={"number": numero, "message": msg_texto})
+        except Exception as e:
+            print(f"Erro no agente {nome}: {e}")
+        
+        time.sleep(intervalo)
 
-with col1:
-    user_prompt = st.text_area(
-        "Descreva a missão do agente:",
-        placeholder="Ex: Monitore meu sistema e me mande um alerta no Telegram a cada 30 segundos dizendo que está tudo OK.",
-        height=150
-    )
+# --- INTERFACE ---
+st.title("🤖 Fábrica de Agentes Autônomos")
+st.sidebar.header("📊 Agentes Registrados (Supabase)")
 
-if st.button("🚀 Criar e Ativar Agente Agora"):
-    if not user_prompt:
-        st.warning("Descreva o que o agente deve fazer.")
-    else:
-        with st.status("IA trabalhando...", expanded=True) as status:
-            try:
-                # PASSO 1: A IA planeja o agente
-                st.write("🧠 Llama-3.3-70B desenhando a lógica...")
-                sys_prompt = "Você é um engenheiro de automação. Responda APENAS com um JSON puro contendo: 'name', 'interval_sec', 'message'."
-                
-                chat = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    response_format={"type": "json_object"} # Força o JSON puro
-                )
-                
-                blueprint = json.loads(chat.choices[0].message.content)
-                st.write("✅ Lógica gerada!")
+# Layout de Colunas
+col_input, col_monitor = st.columns([1, 1])
 
-                # PASSO 2: Envio para o Make (Onde a execução acontece)
-                st.write("📡 Ativando Webhook no Make.com...")
-                response = requests.post(st.secrets["N8N_WEBHOOK_URL"], json=blueprint)
-                
-                # PASSO 3: Registro no Banco de Dados
-                st.write("💾 Salvando configuração no Supabase...")
-                db_entry = {
-                    "company_id": "00000000-0000-0000-0000-000000000000",
-                    "nome_agente": blueprint['name'],
-                    "objetivo_bruto": user_prompt,
-                    "blueprint_json": blueprint
-                }
-                supabase.table("agentes").insert(db_entry).execute()
-                
-                status.update(label="✨ Agente Criado com Sucesso!", state="complete")
-                st.balloons()
-                
-                # Exibição do "Cérebro" do Agente
-                st.subheader("Ficha Técnica do Agente")
-                st.json(blueprint)
-                
-            except Exception as e:
-                st.error(f"Falha na criação: {e}")
-
-# Rodapé lateral
-st.sidebar.success("Sistema conectado via Groq API")
+with col_input:
+    st.subheader("🛠️ Criar Novo Agente")
+    missao = st.text_area("O que o agente deve fazer?", "Ex: Me avisar sobre o clima a cada 30 segundos")
+    api_whatsapp = st.text_input("URL da sua API WhatsApp", "https://sua-api.com/send")
+    
+    if st.button("Lançar Agente"):
+        with st.spinner("IA configurando agente..."):
+            # 1. IA cria o blueprint
+            prompt_eng = f"Crie um JSON para: {missao}. Inclua 'nome', 'segundos', 'numero', 'personalidade'."
+            res = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt_eng}],
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(res.choices[0].message.content)
+            
+            # 2. Salva no Supabase
+            db_data = {
+                "nome_agente": data['nome'],
+                "objetivo_bruto": missao,
+                "blueprint_json": data,
+                "company_id": "00000000-0000-0000-0000-000000000000"
+            }
+            st.session_state.supabase.table("agentes").insert(db_data).execute()
+            
+            # 3. Inicia o loop em segundo plano
+            st.session_state.agentes_ativos[data['nome']] = True
+            t = threading.Thread(target=worker_agente, args=(data['nome'], data['personalidade'], data['segundos'], data['numero'], api_whatsapp))
+            t.daemon = True
+            t.start()
+            
+            st.success(
