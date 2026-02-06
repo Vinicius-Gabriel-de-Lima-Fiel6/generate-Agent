@@ -1,133 +1,100 @@
 import streamlit as st
+from openai import OpenAI
 import requests
+from supabase import create_client, Client
 import json
-from groq import Groq
-from supabase import create_client
 
-# --- CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
-def init_connections():
-    try:
-        # Inicializa Clientes
-        st.session_state.groq = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        st.session_state.supabase = create_client(
-            st.secrets["SUPABASE_URL"], 
-            st.secrets["SUPABASE_KEY"]
-        )
-        return True
-    except Exception as e:
-        st.error(f"Erro na configuração: {e}")
-        return False
+# --- CONFIGURAÇÕES INICIAIS ---
+st.set_page_config(page_title="Gerador de Agentes AI", page_icon="🤖")
 
-# --- ENGINE DE INTELIGÊNCIA (LLAMA-3.3-70B) ---
-def architect_n8n_agent(user_prompt):
-    system_instruction = """
-    Você é um Arquiteto de Software especializado em n8n.
-    Sua tarefa é converter a ideia do usuário em um JSON compatível com a API do n8n.
+# Inicialização do Supabase
+if "supabase" not in st.session_state:
+    url: str = st.secrets["SUPABASE_URL"]
+    key: str = st.secrets["SUPABASE_KEY"]
+    st.session_state.supabase = create_client(url, key)
 
-    REGRAS:
-    1. Identifique o Trigger (n8n-nodes-base.cron para tempo, manualTrigger para botão).
-    2. Adicione os nós lógicos necessários (n8n-nodes-base.httpRequest, n8n-nodes-base.emailSend, etc).
-    3. Retorne APENAS um JSON estruturado com: 'name', 'nodes' e 'connections'.
-    """
-    
-    completion = st.session_state.groq.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_prompt}
-        ],
-        model="llama-3.3-70b-versatile",
-        response_format={"type": "json_object"}
-    )
-    return json.loads(completion.choices[0].message.content)
+# Inicialização do OpenAI (Llama-3 via Groq ou similar)
+client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=st.secrets["GROQ_API_KEY"]
+)
 
-# --- COMUNICAÇÃO COM N8N CLOUD ---
-def deploy_to_n8n(blueprint):
-    # Pega a URL do Webhook que você colocou nos Secrets
-    # Certifique-se que o nome no Secrets é exatamente N8N_WEBHOOK_URL
-    url = st.secrets["N8N_WEBHOOK_URL"] 
+# --- FUNÇÕES ---
+
+def deploy_to_automation(blueprint):
+    """Envia o blueprint para o Webhook do Make"""
+    url = st.secrets["N8N_WEBHOOK_URL"] # Mantive o nome da secret, mas use a URL do Make
     
     payload = {
         "workflow_name": blueprint.get("name", "Novo Agente"),
-        "blueprint": blueprint,
-        "timestamp": "agora"
+        "blueprint": blueprint
     }
     
-    # Enviamos sem a variável 'headers' para evitar o NameError
-    # O Webhook do n8n aceita o JSON direto
+    # Envio simples para o Webhook
     response = requests.post(url, json=payload)
     return response
 
-# --- INTERFACE DO USUÁRIO ---
-st.set_page_config(page_title="AgenteA | AI Builder", layout="wide")
+# --- INTERFACE ---
+st.title("🚀 Criador de Agentes Automáticos")
+st.subheader("O que você deseja que o seu robô faça?")
 
-if init_connections():
-    # Recupera Contexto (Multi-tenant)
-    company_id = st.query_params.get("company_id")
-    
-    st.title("🧠 AgenteA")
-    st.caption("Fábrica de Agentes Inteligentes Autônomos")
+user_input = st.text_area(
+    "Descreva o objetivo (ex: me mande um oi de 30 em 30 segundos no WhatsApp)",
+    placeholder="Eu quero um agente que..."
+)
 
-    if not company_id:
-        st.warning("⚠️ Atenção: ID da Empresa não detectado. O registro será feito como 'Acesso Público'.")
-        company_id = "00000000-0000-0000-0000-000000000000" # UUID fake para teste
+if st.button("Gerar e Ativar Agente"):
+    if user_input:
+        with st.spinner("Llama-3 criando a lógica do agente..."):
+            try:
+                # 1. IA gera o Blueprint
+                prompt = f"""
+                Você é um arquiteto de automação. Crie um JSON de configuração para um agente:
+                Objetivo: {user_input}
+                Retorne APENAS o JSON com: 'name', 'trigger' e 'action'.
+                """
+                
+                completion = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                # Limpeza básica do retorno da IA
+                content = completion.choices[0].message.content
+                blueprint = json.loads(content[content.find("{"):content.rfind("}")+1])
+                
+                # 2. Envia para o Make (Automação)
+                res = deploy_to_automation(blueprint)
+                
+                # --- CORREÇÃO DO ERRO DE JSON ---
+                try:
+                    wf_data = res.json()
+                    wf_id = wf_data.get("id", "make-flow")
+                except:
+                    # Se o Make responder texto puro (Accepted), definimos um ID padrão
+                    wf_id = "make-flow-active"
+                
+                # 3. Salva no Supabase (Banco de Dados)
+                company_id = "00000000-0000-0000-0000-000000000000" # Use UUID ou texto se mudou o SQL
+                
+                db_data = {
+                    "company_id": company_id,
+                    "nome_agente": blueprint.get("name"),
+                    "objetivo_bruto": user_input,
+                    "n8n_workflow_id": str(wf_id),
+                    "blueprint_json": blueprint
+                }
+                
+                st.session_state.supabase.table("agentes").insert(db_data).execute()
+                
+                st.success("✅ Agente Criado e Enviado ao Make!")
+                st.balloons()
+                st.json(blueprint)
+                
+            except Exception as e:
+                st.error(f"Erro no processo: {str(e)}")
+    else:
+        st.warning("Por favor, descreva o que o agente deve fazer.")
 
-    # UI de Criação
-    with st.container(border=True):
-        st.markdown("### ➕ Descreva a missão do novo agente")
-        user_input = st.text_area(
-            label="O que o sistema deve fazer?",
-            placeholder="Ex: Monitore o preço da soja e me avise no WhatsApp se subir mais de 5%.",
-            height=150
-        )
-        
-        if st.button("🚀 Criar e Ativar Agente", type="primary", use_container_width=True):
-            if user_input:
-                with st.status("🏗️ Gerando infraestrutura...", expanded=True) as status:
-                    # 1. IA projeta o agente
-                    st.write("🧠 Llama-3 projetando workflow...")
-                    blueprint = architect_n8n_agent(user_input)
-                    
-                    # 2. n8n implanta na nuvem
-                    st.write("📡 Enviando para n8n Cloud...")
-                    n8n_res = deploy_to_n8n(blueprint)
-                    
-                    if n8n_res.status_code in [200, 201]:
-                        wf_data = n8n_res.json()
-                        wf_id = wf_data.get("id")
-                        
-                        # 3. Supabase registra no Banco Seguro (RLS)
-                        st.write("💾 Registrando no Supabase...")
-                        db_data = {
-                            "company_id": company_id,           # Deve ser um UUID válido ou texto se você mudou o SQL
-                            "nome_agente": blueprint.get("name"), 
-                            "objetivo_bruto": user_input,
-                            "n8n_workflow_id": str(wf_id),      # Certifique-se que wf_id não é None
-                            "blueprint_json": blueprint         # Deve ser um dicionário (JSONB no SQL)
-                                    }
-                        st.session_state.supabase.table("agentes").insert(db_data).execute()
-                        
-                        status.update(label="✅ Agente Ativado com Sucesso!", state="complete")
-                        st.balloons()
-                        
-                        st.success(f"Agente '{blueprint.get('name')}' está agora trabalhando para você.")
-                        st.info(f"ID do Workflow: {wf_id}")
-                    else:
-                        st.error(f"Erro no n8n Cloud: {n8n_res.text}")
-            else:
-                st.warning("Por favor, descreva sua ideia.")
-
-    st.divider()
-    
-    # Visualização de Agentes Ativos (Simulação de Dashboard)
-    st.subheader("🤖 Agentes Ativos")
-    try:
-        resp = st.session_state.supabase.table("agentes").select("*").eq("company_id", company_id).execute()
-        if resp.data:
-            for ag in resp.data:
-                with st.expander(f"Agente: {ag['nome_agente']} (Criado em: {ag['criado_em'][:10]})"):
-                    st.write(f"**Objetivo:** {ag['objetivo_bruto']}")
-                    st.caption(f"Status: {ag['status']} | n8n ID: {ag['n8n_workflow_id']}")
-        else:
-            st.info("Nenhum agente criado para esta empresa ainda.")
-    except:
-        st.info("Conecte-se via Dashboard Principal para ver seus agentes.")
+# --- FOOTER ---
+st.sidebar.info("Utilizando Llama-3.3-70B + Make + Supabase")
