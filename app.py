@@ -42,18 +42,13 @@ def architect_n8n_agent(user_prompt):
 
 # --- COMUNICAÇÃO COM N8N CLOUD ---
 def deploy_to_n8n(blueprint):
-    url = f"{st.secrets['N8N_URL']}/workflows"
-    headers = {
-        "X-N8N-API-KEY": st.secrets["N8N_API_KEY"],
-        "Content-Type": "application/json"
-    }
+    # Use a URL do Webhook que você copiou do n8n
+    url = st.secrets["N8N_WEBHOOK_URL"] 
     
+    # Não precisa mais da X-N8N-API-KEY aqui, pois é um Webhook aberto
     payload = {
-        "name": blueprint.get("name", "Novo Agente Autônomo"),
-        "nodes": blueprint.get("nodes", []),
-        "connections": blueprint.get("connections", {}),
-        "active": True,
-        "settings": {"executionOrder": "v1"}
+        "event": "create_agent",
+        "blueprint": blueprint
     }
     
     response = requests.post(url, json=payload, headers=headers)
