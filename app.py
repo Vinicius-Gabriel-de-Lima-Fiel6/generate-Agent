@@ -12,7 +12,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-groq_client = Groq("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")
+# Não inicializa Groq client aqui - vai inicializar quando tiver a chave
+groq_client = None
+
+# ==================== CARREGAR SECRETS ====================
+try:
+    groq_key = st.secrets.get("GROQ_API_KEY", "")
+    modo_cloud = True if groq_key else False
+except:
+    groq_key = ""
+    modo_cloud = False
 
 # ==================== SISTEMA DE ENGENHARIA DE PROMPTS ====================
 
@@ -22,6 +31,11 @@ class EngenhariaPrompts:
     @staticmethod
     def analisar_prompt_usuario(prompt: str, groq_key: str) -> dict:
         """Analisa o prompt do usuário e extrai intenções"""
+        
+        if not groq_key:
+            return {"erro": "API Key do Groq não fornecida"}
+        
+        client = Groq(api_key=groq_key)
         
         system_prompt = """Você é um especialista em análise de prompts para automação.
         
@@ -39,26 +53,33 @@ Analise o prompt do usuário e retorne um JSON com:
 
 Retorne APENAS o JSON, sem explicações."""
         
-        response = groq_client.chat.completions.create(
-            model="Llama-3.3-70B-Versatile",
-            max_tokens=1500,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
-            api_key=groq_key
-        )
-        
         try:
-            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
-            if json_match:
-                return json.loads(json_match.group())
-        except:
-            pass
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                max_tokens=1500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            
+            try:
+                json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+                if json_match:
+                    return json.loads(json_match.group())
+            except:
+                pass
+        except Exception as e:
+            return {"erro": f"Erro ao conectar com Groq: {str(e)}"}
         
         return {}
     
     @staticmethod
     def expandir_para_fluxo_detalhado(analise: dict, prompt_original: str, groq_key: str) -> dict:
         """Expande a análise em um fluxo detalhado com steps"""
+        
+        if not groq_key:
+            return {"erro": "API Key do Groq não fornecida"}
+        
+        client = Groq(api_key=groq_key)
         
         system_prompt = f"""Você é um especialista em design de workflows e automações.
 
@@ -96,20 +117,22 @@ Crie um FLUXO DETALHADO com a estrutura:
 
 Retorne APENAS o JSON bem estruturado."""
         
-        response = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
-            max_tokens=3000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": "Crie o fluxo detalhado"}],
-            api_key=groq_key
-        )
-        
         try:
-            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
-            if json_match:
-                return json.loads(json_match.group())
-        except:
-            pass
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                max_tokens=3000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": "Crie o fluxo detalhado"}],
+            )
+            
+            try:
+                json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+                if json_match:
+                    return json.loads(json_match.group())
+            except:
+                pass
+        except Exception as e:
+            return {"erro": f"Erro ao gerar fluxo: {str(e)}"}
         
         return {}
     
@@ -117,10 +140,15 @@ Retorne APENAS o JSON bem estruturado."""
     def gerar_codigo_executavel(fluxo: dict, prompt_original: str, groq_key: str) -> dict:
         """Gera código Python executável para o agente"""
         
+        if not groq_key:
+            return {"erro": "API Key do Groq não fornecida"}
+        
+        client = Groq(api_key=groq_key)
+        
         system_prompt = f"""Você é um especialista em Python e automações.
 
 Baseado neste fluxo:
-{json.dumps(fluxo, indent=2, ensure_ascii=False)}
+{json.dumps(fluxo, indent=2, ensure_ascii=False)[:2000]}...
 
 Gere CÓDIGO PYTHON COMPLETO que:
 1. Implemente cada step do fluxo
@@ -149,26 +177,33 @@ Retorne um JSON com:
 
 Retorne APENAS o JSON com código."""
         
-        response = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
-            max_tokens=4000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": "Gere o código"}],
-            api_key=groq_key
-        )
-        
         try:
-            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
-            if json_match:
-                return json.loads(json_match.group())
-        except:
-            pass
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                max_tokens=4000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": "Gere o código"}],
+            )
+            
+            try:
+                json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+                if json_match:
+                    return json.loads(json_match.group())
+            except:
+                pass
+        except Exception as e:
+            return {"erro": f"Erro ao gerar código: {str(e)}"}
         
         return {}
     
     @staticmethod
     def gerar_dockerfile(codigo: dict, groq_key: str) -> str:
         """Gera Dockerfile para containerizar o agente"""
+        
+        if not groq_key:
+            return "ERRO: API Key não fornecida"
+        
+        client = Groq(api_key=groq_key)
         
         system_prompt = """Crie um Dockerfile otimizado que:
 1. Use imagem Python slim
@@ -179,17 +214,19 @@ Retorne APENAS o JSON com código."""
 
 Retorne APENAS o conteúdo do Dockerfile."""
         
-        response = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
-            max_tokens=1500,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": f"Dependências: {json.dumps(codigo.get('dependencias', []))}"}
-            ],
-            api_key=groq_key
-        )
-        
-        return response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                max_tokens=1500,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": f"Dependências: {json.dumps(codigo.get('dependencias', []))}"}
+                ],
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"ERRO: {str(e)}"
     
     @staticmethod
     def gerar_documentacao_completa(
@@ -200,6 +237,11 @@ Retorne APENAS o conteúdo do Dockerfile."""
         groq_key: str
     ) -> str:
         """Gera documentação markdown completa"""
+        
+        if not groq_key:
+            return "ERRO: API Key não fornecida"
+        
+        client = Groq(api_key=groq_key)
         
         system_prompt = """Crie uma documentação COMPLETA em Markdown que inclua:
 1. Visão geral
@@ -212,27 +254,29 @@ Retorne APENAS o conteúdo do Dockerfile."""
 
 Retorne APENAS markdown bem formatado."""
         
-        response = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
-            max_tokens=4000,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": f"""
+        try:
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                max_tokens=4000,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": f"""
 Prompt original: {prompt_original}
 Fluxo: {json.dumps(fluxo, indent=2)[:1000]}...
 Código: {json.dumps(codigo, indent=2)[:1000]}..."""}
-            ],
-            api_key=groq_key
-        )
-        
-        return response.choices[0].message.content
+                ],
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"ERRO: {str(e)}"
 
 # ==================== UI ====================
 
 st.markdown("""
 # 🧠 AgentAI - Engenharia de Prompts Avançada
 
-**Crie agentes complexos do zero com UM prompt rápido**
+**Crie agentes profissionais do zero com UM prompt rápido**
 
 Powered by Groq (100% grátis) + Engenharia de Prompts Avançada
 """)
@@ -244,12 +288,24 @@ st.divider()
 with st.sidebar:
     st.markdown("# ⚙️ Configuração")
     
-    groq_key = st.text_input(
-        "🔐 Groq API Key",
-        type="password",
-        placeholder="gsk_...",
-        help="Grátis em console.groq.com"
-    )
+    # Status da API Key
+    if groq_key:
+        st.success("✅ Groq API Key carregada do Streamlit Secrets")
+        if st.button("🔄 Recarregar", use_container_width=True):
+            st.rerun()
+    else:
+        st.warning("⚠️ Groq API Key não encontrada")
+        st.info("""
+        **Para usar no Streamlit Cloud:**
+        
+        1. Vá em "Manage app" (canto inferior direito)
+        2. Clique em "Secrets"
+        3. Cole:
+        ```
+        GROQ_API_KEY = "gsk_..."
+        ```
+        4. Recarregue a página
+        """)
     
     st.divider()
     
@@ -263,6 +319,7 @@ with st.sidebar:
     5. 🐳 Cria Dockerfile
     6. 📖 Gera documentação
     """)
+
 
 # ==================== MAIN CONTENT ====================
 
@@ -305,7 +362,19 @@ Ou: Sincronize Shopify → Google Analytics, gerando dashboard."""
         if not prompt.strip():
             st.error("❌ Escreva um prompt!")
         elif not groq_key:
-            st.error("❌ Configure Groq API Key!")
+            st.error("""
+            ❌ Groq API Key não configurada!
+            
+            **Para Streamlit Cloud:**
+            1. Clique "Manage app" (canto inferior direito)
+            2. Vá em "Secrets"
+            3. Cole: `GROQ_API_KEY = "gsk_..."`
+            4. Recarregue a página
+            
+            **Para rodar localmente:**
+            1. Configure na sidebar
+            2. Ou defina variável de ambiente: `export GROQ_API_KEY="gsk_..."`
+            """)
         else:
             with st.spinner("🧠 Analisando seu prompt..."):
                 
