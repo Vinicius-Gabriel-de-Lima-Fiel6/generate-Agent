@@ -3,7 +3,7 @@ import requests
 import json
 import time
 from datetime import datetime
-from anthropic import Anthropic
+from groq import Groq
 import re
 
 # Configuração da página
@@ -14,8 +14,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inicializa cliente Claude
-client = Anthropic()
+# Inicializa cliente Groq
+groq_client = Groq()
 
 # CSS customizado
 st.markdown("""
@@ -45,12 +45,12 @@ st.markdown("""
 # ==================== CARREGAR SECRETS ====================
 # Tenta carregar do Streamlit Secrets (Cloud) ou entrada manual (Development)
 try:
-    claude_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+    groq_key = st.secrets.get("GROQ_API_KEY", "")
     n8n_url = st.secrets.get("N8N_URL", "")
     n8n_api_key = st.secrets.get("N8N_API_KEY", "")
     modo_cloud = True
 except:
-    claude_key = ""
+    groq_key = ""
     n8n_url = ""
     n8n_api_key = ""
     modo_cloud = False
@@ -86,14 +86,14 @@ with st.sidebar:
     
     st.divider()
     
-    # Configuração do Claude
-    st.subheader("Claude API")
-    claude_key = st.text_input(
-        "🔐 Claude API Key",
+    # Configuração do Groq
+    st.subheader("Groq API")
+    groq_key = st.text_input(
+        "🔐 Groq API Key",
         type="password",
-        value=claude_key or "",
-        placeholder="sk-ant-...",
-        help="Obtenha em console.anthropic.com"
+        value=groq_key or "",
+        placeholder="gsk_...",
+        help="Obtenha em console.groq.com"
     )
     
     st.divider()
@@ -191,8 +191,8 @@ Ou: Sincronize dados do Shopify com uma planilha Google Sheets""",
     if gerar_btn:
         if not prompt_usuario.strip():
             st.error("❌ Por favor, descreva o agente que quer criar!")
-        elif not claude_key:
-            st.error("❌ Configure a Claude API Key na sidebar!")
+        elif not groq_key:
+            st.error("❌ Configure a Groq API Key na sidebar!")
         elif not n8n_url or n8n_url == "https://seu-n8n.com":
             st.error("❌ Configure a URL do n8n na sidebar!")
         else:
@@ -233,17 +233,17 @@ Formato do JSON:
 
 Retorne APENAS o JSON válido, sem markdown, sem explicações."""
 
-                    response = client.messages.create(
-                        model="claude-3-5-sonnet-20241022",
+                    response = groq_client.chat.completions.create(
+                        model="mixtral-8x7b-32768",
                         max_tokens=3000,
                         system=system_prompt,
                         messages=[
                             {"role": "user", "content": f"Crie um agente para: {prompt_usuario}"}
                         ],
-                        api_key=claude_key
+                        api_key=groq_key
                     )
                     
-                    workflow_text = response.content[0].text
+                    workflow_text = response.choices[0].message.content
                     
                     # Extrai JSON da resposta
                     json_match = re.search(r'\{[\s\S]*\}', workflow_text)
