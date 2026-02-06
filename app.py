@@ -1,594 +1,566 @@
 import streamlit as st
-import requests
 import json
-import time
-from datetime import datetime
 from groq import Groq
+from datetime import datetime
 import re
 
-# Configuração da página
+# ==================== CONFIG ====================
 st.set_page_config(
-    page_title="Agent Factory",
-    page_icon="🤖",
+    page_title="AgentAI - Engenharia de Prompts Avançada",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Inicializa cliente Groq
 groq_client = Groq()
 
-# CSS customizado
+# ==================== SISTEMA DE ENGENHARIA DE PROMPTS ====================
+
+class EngenhariaPrompts:
+    """Sistema avançado de engenharia de prompts para criar agentes"""
+    
+    @staticmethod
+    def analisar_prompt_usuario(prompt: str, groq_key: str) -> dict:
+        """Analisa o prompt do usuário e extrai intenções"""
+        
+        system_prompt = """Você é um especialista em análise de prompts para automação.
+        
+Analise o prompt do usuário e retorne um JSON com:
+{
+  "intenção_principal": "qual é o objetivo principal",
+  "entidades": ["lista", "de", "entidades", "mencionadas"],
+  "integrações_necessárias": ["Discord", "Gmail", "Google Sheets", "APIs", etc],
+  "tipo_agente": "monitoramento|processamento|sincronização|notificação|análise|customizado",
+  "frequência_estimada": "webhook|5min|15min|hourly|daily|weekly",
+  "complexidade": 1-10,
+  "pré_requisitos": ["lista", "de", "dados", "necessários"],
+  "casos_especiais": ["lista", "de", "edge cases"]
+}
+
+Retorne APENAS o JSON, sem explicações."""
+        
+        response = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            max_tokens=1500,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+            api_key=groq_key
+        )
+        
+        try:
+            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        return {}
+    
+    @staticmethod
+    def expandir_para_fluxo_detalhado(analise: dict, prompt_original: str, groq_key: str) -> dict:
+        """Expande a análise em um fluxo detalhado com steps"""
+        
+        system_prompt = f"""Você é um especialista em design de workflows e automações.
+
+Baseado nesta análise inicial:
+{json.dumps(analise, indent=2, ensure_ascii=False)}
+
+E neste prompt do usuário:
+"{prompt_original}"
+
+Crie um FLUXO DETALHADO com a estrutura:
+{{
+  "nome_agente": "Nome descritivo",
+  "descricao": "Descrição completa",
+  "diagrama": "ASCII art do fluxo",
+  "steps": [
+    {{
+      "id": 1,
+      "nome": "Nome do step",
+      "tipo": "trigger|processamento|validação|ação|notificação",
+      "descrição": "O que faz",
+      "inputs": ["dados de entrada"],
+      "outputs": ["dados de saída"],
+      "condicionalidades": ["se X então Y"],
+      "integrações": ["APIs/apps necessários"],
+      "tratamento_erros": "Como lidar com falhas"
+    }}
+  ],
+  "variáveis_necessárias": {{"chave": "descrição"}},
+  "API_endpoints": ["lista de APIs a usar"],
+  "webhooks_necessários": ["lista de webhooks"],
+  "rate_limits": "Considerar limites de taxa",
+  "retry_strategy": "Como fazer retry em falhas",
+  "logging_monitoring": "Como monitorar execução"
+}}
+
+Retorne APENAS o JSON bem estruturado."""
+        
+        response = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            max_tokens=3000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": "Crie o fluxo detalhado"}],
+            api_key=groq_key
+        )
+        
+        try:
+            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        return {}
+    
+    @staticmethod
+    def gerar_codigo_executavel(fluxo: dict, prompt_original: str, groq_key: str) -> dict:
+        """Gera código Python executável para o agente"""
+        
+        system_prompt = f"""Você é um especialista em Python e automações.
+
+Baseado neste fluxo:
+{json.dumps(fluxo, indent=2, ensure_ascii=False)}
+
+Gere CÓDIGO PYTHON COMPLETO que:
+1. Implemente cada step do fluxo
+2. Tenha tratamento de erros robusto
+3. Use requests/bibliotecas padrão
+4. Tenha logging detalhado
+5. Seja facilmente customizável
+
+Retorne um JSON com:
+{{
+  "arquivo_principal": "nome.py",
+  "imports": ["lista", "de", "imports"],
+  "classes": {{
+    "NomeClasse": "código da classe..."
+  }},
+  "funcoes": {{
+    "nome_funcao": "código da função..."
+  }},
+  "configuracoes": {{
+    "variavel": "valor padrão"
+  }},
+  "exemplo_uso": "Como executar",
+  "dependencias": ["pip", "install", "pacotes"],
+  "documentacao": "Documentação do código"
+}}
+
+Retorne APENAS o JSON com código."""
+        
+        response = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            max_tokens=4000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": "Gere o código"}],
+            api_key=groq_key
+        )
+        
+        try:
+            json_match = re.search(r'\{[\s\S]*\}', response.choices[0].message.content)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        return {}
+    
+    @staticmethod
+    def gerar_dockerfile(codigo: dict, groq_key: str) -> str:
+        """Gera Dockerfile para containerizar o agente"""
+        
+        system_prompt = """Crie um Dockerfile otimizado que:
+1. Use imagem Python slim
+2. Instale dependências
+3. Configure variáveis de ambiente
+4. Execute o agente
+5. Seja seguro e eficiente
+
+Retorne APENAS o conteúdo do Dockerfile."""
+        
+        response = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            max_tokens=1500,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": f"Dependências: {json.dumps(codigo.get('dependencias', []))}"}
+            ],
+            api_key=groq_key
+        )
+        
+        return response.choices[0].message.content
+    
+    @staticmethod
+    def gerar_documentacao_completa(
+        analise: dict, 
+        fluxo: dict, 
+        codigo: dict, 
+        prompt_original: str,
+        groq_key: str
+    ) -> str:
+        """Gera documentação markdown completa"""
+        
+        system_prompt = """Crie uma documentação COMPLETA em Markdown que inclua:
+1. Visão geral
+2. Arquitetura
+3. Setup instructions
+4. API reference
+5. Exemplos de uso
+6. Troubleshooting
+7. Contribuindo
+
+Retorne APENAS markdown bem formatado."""
+        
+        response = groq_client.chat.completions.create(
+            model="mixtral-8x7b-32768",
+            max_tokens=4000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": f"""
+Prompt original: {prompt_original}
+Fluxo: {json.dumps(fluxo, indent=2)[:1000]}...
+Código: {json.dumps(codigo, indent=2)[:1000]}..."""}
+            ],
+            api_key=groq_key
+        )
+        
+        return response.choices[0].message.content
+
+# ==================== UI ====================
+
 st.markdown("""
-    <style>
-    .agent-card {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #f0f2f6;
-        margin: 10px 0;
-        border-left: 5px solid #1f77b4;
-    }
-    .success-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-    }
-    .error-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 🧠 AgentAI - Engenharia de Prompts Avançada
 
-# ==================== CARREGAR SECRETS ====================
-# Tenta carregar do Streamlit Secrets (Cloud) ou entrada manual (Development)
-try:
-    groq_key = st.secrets.get("GROQ_API_KEY", "")
-    n8n_url = st.secrets.get("N8N_URL", "")
-    n8n_api_key = st.secrets.get("N8N_API_KEY", "")
-    modo_cloud = True
-except:
-    groq_key = ""
-    n8n_url = ""
-    n8n_api_key = ""
-    modo_cloud = False
+**Crie agentes complexos do zero com UM prompt rápido**
 
-# ==================== SIDEBAR ====================
-with st.sidebar:
-    st.markdown("# ⚙️ Configurações")
-    st.divider()
-    
-    if modo_cloud:
-        st.success("✅ Usando Streamlit Secrets")
-        if st.button("🔄 Recarregar Secrets", use_container_width=True):
-            st.rerun()
-    else:
-        st.info("💻 Modo Development - Configure suas chaves")
-    
-    # Configuração do n8n
-    st.subheader("N8N")
-    n8n_url = st.text_input(
-        "🔗 URL do n8n",
-        value=n8n_url or "https://seu-n8n.com",
-        placeholder="https://seu-n8n.com",
-        help="URL base do seu servidor n8n"
-    )
-    
-    n8n_api_key = st.text_input(
-        "🔑 API Key do n8n",
-        type="password",
-        value=n8n_api_key or "",
-        placeholder="Sua API key aqui",
-        help="Obtenha em Settings > API > Generate API Key"
-    )
-    
-    st.divider()
-    
-    # Configuração do Groq
-    st.subheader("Groq API")
-    groq_key = st.text_input(
-        "🔐 Groq API Key",
-        type="password",
-        value=groq_key or "",
-        placeholder="gsk_...",
-        help="Obtenha em console.groq.com"
-    )
-    
-    st.divider()
-    
-    # Informações úteis
-    st.subheader("ℹ️ Informações")
-    st.markdown("""
-    **Como começar:**
-    1. Configure suas chaves de API
-    2. Descreva o agente que quer criar
-    3. IA gera a estrutura
-    4. Crie no n8n com um clique
-    
-    **Exemplos de agentes:**
-    - Monitorar preços de criptos
-    - Responder emails automaticamente
-    - Sincronizar planilhas
-    - Postar em redes sociais
-    - Enviar alertas por Telegram
-    """)
-
-# ==================== INICIALIZAR SESSION STATE ====================
-if "agentes" not in st.session_state:
-    st.session_state.agentes = []
-
-if "workflow_gerado" not in st.session_state:
-    st.session_state.workflow_gerado = None
-
-if "prompt_atual" not in st.session_state:
-    st.session_state.prompt_atual = ""
-
-# ==================== HEADER ====================
-st.markdown("""
-# 🤖 Agent Factory
-**Crie agentes IA em segundos, sem programação**
-
-Descreva o que você quer que um agente faça e deixe a IA criar automaticamente um workflow completo no n8n.
+Powered by Groq (100% grátis) + Engenharia de Prompts Avançada
 """)
 
 st.divider()
 
-# ==================== MAIN CONTENT ====================
-tab1, tab2, tab3 = st.tabs(["🚀 Criar Agente", "📊 Meus Agentes", "📖 Guia"])
+# ==================== SIDEBAR ====================
 
-# ==================== TAB 1: CRIAR AGENTE ====================
-with tab1:
-    st.header("Descreva seu Agente")
+with st.sidebar:
+    st.markdown("# ⚙️ Configuração")
     
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        prompt_usuario = st.text_area(
-            "📝 O que você quer que o agente faça?",
-            value=st.session_state.prompt_atual,
-            placeholder="""Ex: Monitore o preço do Bitcoin a cada 5 minutos e mande um alerta no Discord quando passar de $50k
-
-Ou: Verifique novos emails e responda automaticamente com um template padrão
-
-Ou: Sincronize dados do Shopify com uma planilha Google Sheets""",
-            height=150,
-            key="prompt_input"
-        )
-    
-    with col2:
-        st.markdown("""
-        **💡 Dicas:**
-        - Seja específico
-        - Mencione fontes de dados
-        - Inclua ações desejadas
-        - Defina frequência
-        """)
+    groq_key = st.text_input(
+        "🔐 Groq API Key",
+        type="password",
+        placeholder="gsk_...",
+        help="Grátis em console.groq.com"
+    )
     
     st.divider()
+    
+    st.markdown("""
+    **Como funciona:**
+    
+    1. ✍️ Escreva um prompt
+    2. 🧠 IA analisa e expande
+    3. 📊 Gera fluxo detalhado
+    4. 💻 Produz código Python
+    5. 🐳 Cria Dockerfile
+    6. 📖 Gera documentação
+    """)
+
+# ==================== MAIN CONTENT ====================
+
+tabs = st.tabs([
+    "🚀 Criar Agente",
+    "📊 Dashboard",
+    "🎓 Guia",
+    "📚 Exemplos"
+])
+
+# ==================== TAB 1: CRIAR AGENTE ====================
+
+with tabs[0]:
+    st.header("Descreva seu Agente")
+    
+    prompt = st.text_area(
+        "Seu prompt (seja rápido e direto)",
+        height=150,
+        placeholder="""Ex: Monitore Bitcoin a cada 5 min. Se > $50k, alerta Discord + Google Sheets.
+
+Ou: Leia emails Gmail, extrai dados, cria tarefas Asana automaticamente.
+
+Ou: Sincronize Shopify → Google Analytics, gerando dashboard."""
+    )
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        gerar_btn = st.button(
-            "🚀 Gerar Agente",
-            use_container_width=True,
-            type="primary"
-        )
+        velocidade_rapida = st.checkbox("⚡ Modo Rápido", value=True, help="Apenas análise básica")
     
     with col2:
-        st.button(
-            "🔄 Limpar",
-            use_container_width=True,
-            key="limpar_btn"
-        )
+        incluir_codigo = st.checkbox("💻 Gerar Código", value=True)
     
     with col3:
-        st.info("Etapa 1/2")
+        incluir_docker = st.checkbox("🐳 Gerar Docker", value=False)
     
-    # ==================== GERAÇÃO DA IA ====================
-    if gerar_btn:
-        if not prompt_usuario.strip():
-            st.error("❌ Por favor, descreva o agente que quer criar!")
+    st.divider()
+    
+    if st.button("🚀 Gerar Agente", type="primary", use_container_width=True):
+        if not prompt.strip():
+            st.error("❌ Escreva um prompt!")
         elif not groq_key:
-            st.error("❌ Configure a Groq API Key na sidebar!")
-        elif not n8n_url or n8n_url == "https://seu-n8n.com":
-            st.error("❌ Configure a URL do n8n na sidebar!")
+            st.error("❌ Configure Groq API Key!")
         else:
-            st.session_state.prompt_atual = prompt_usuario
-            
-            with st.spinner("🧠 IA gerando estrutura do agente..."):
-                try:
-                    # System prompt para gerar workflow
-                    system_prompt = """Você é um expert em n8n (automação workflow).
-Um usuário descreveu um agente que precisa ser criado.
-Sua tarefa é gerar um JSON válido com a estrutura de workflow do n8n.
-
-IMPORTANTE:
-- Gere nós realistas que existem no n8n
-- Use os tipos de nó corretos (n8n-nodes-base.*)
-- Conecte os nós de forma lógica
-- Inclua triggers (Schedule, Webhook, etc)
-- Adicione ações (HTTP, Discord, Telegram, Google Sheets, etc)
-
-Formato do JSON:
-{
-  "name": "Nome descritivo do agente",
-  "active": true,
-  "nodes": [
-    {
-      "name": "Nome do nó",
-      "type": "n8n-nodes-base.tipoDono",
-      "typeVersion": 1,
-      "position": [x, y],
-      "parameters": { ... configurações ... }
-    }
-  ],
-  "connections": {
-    "nó-origem": ["nó-destino"],
-    "outro-nó": ["próximo-nó"]
-  }
-}
-
-Retorne APENAS o JSON válido, sem markdown, sem explicações."""
-
-                    response = groq_client.chat.completions.create(
-                        model="mixtral-8x7b-32768",
-                        max_tokens=3000,
-                        system=system_prompt,
-                        messages=[
-                            {"role": "user", "content": f"Crie um agente para: {prompt_usuario}"}
-                        ],
-                        api_key=groq_key
+            with st.spinner("🧠 Analisando seu prompt..."):
+                
+                # PASSO 1: Análise Inicial
+                st.info("📍 Passo 1/4: Analisando prompt...")
+                analise = EngenhariaPrompts.analisar_prompt_usuario(prompt, groq_key)
+                
+                if not analise:
+                    st.error("Erro ao analisar prompt. Tente novamente.")
+                else:
+                    with st.expander("📊 Análise (clique para ver)"):
+                        st.json(analise)
+                    
+                    # PASSO 2: Expandir para Fluxo
+                    st.info("📍 Passo 2/4: Gerando fluxo detalhado...")
+                    fluxo = EngenhariaPrompts.expandir_para_fluxo_detalhado(
+                        analise, prompt, groq_key
                     )
                     
-                    workflow_text = response.choices[0].message.content
+                    if fluxo:
+                        with st.expander("🔄 Fluxo Detalhado (clique para ver)"):
+                            if "diagrama" in fluxo:
+                                st.code(fluxo["diagrama"], language="text")
+                            st.json(fluxo)
                     
-                    # Extrai JSON da resposta
-                    json_match = re.search(r'\{[\s\S]*\}', workflow_text)
-                    if json_match:
-                        workflow_json = json_match.group()
-                    else:
-                        workflow_json = workflow_text
-                    
-                    workflow_data = json.loads(workflow_json)
-                    st.session_state.workflow_gerado = workflow_data
-                    
-                    st.success("✅ Workflow gerado com sucesso!")
-                    
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ Erro ao processar JSON: {str(e)}")
-                    with st.expander("Ver resposta bruta"):
-                        st.code(workflow_text)
-                except Exception as e:
-                    st.error(f"❌ Erro: {str(e)}")
-    
-    # ==================== EXIBIÇÃO DO WORKFLOW ====================
-    if st.session_state.workflow_gerado:
-        st.divider()
-        st.subheader("📋 Estrutura do Agente Gerada")
-        
-        workflow = st.session_state.workflow_gerado
-        
-        # Resumo do workflow
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Nós", len(workflow.get("nodes", [])))
-        with col2:
-            connections = workflow.get("connections", {})
-            total_conexoes = sum(len(v) for v in connections.values())
-            st.metric("Conexões", total_conexoes)
-        with col3:
-            st.metric("Status", "✅ Ativo" if workflow.get("active") else "⏸️ Inativo")
-        
-        # Exibe JSON com abas
-        tab_json, tab_nodes, tab_preview = st.tabs(["📄 JSON Completo", "🔗 Nós", "👁️ Preview"])
-        
-        with tab_json:
-            st.json(workflow)
-        
-        with tab_nodes:
-            for node in workflow.get("nodes", []):
-                with st.expander(f"🔧 {node.get('name', 'Sem nome')}"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Tipo:** {node.get('type', 'N/A')}")
-                        st.write(f"**Versão:** {node.get('typeVersion', 1)}")
-                    with col2:
-                        pos = node.get('position', [0, 0])
-                        st.write(f"**Posição:** X={pos[0]}, Y={pos[1]}")
-                    st.write("**Parâmetros:**")
-                    st.json(node.get('parameters', {}))
-        
-        with tab_preview:
-            st.info("Preview visual do workflow (representação simplificada)")
-            preview_text = f"""
-            **Nome do Agente:** {workflow.get('name', 'Sem nome')}
-            
-            **Fluxo:**
-            """
-            
-            connections = workflow.get("connections", {})
-            for origem, destinos in connections.items():
-                for destino in destinos:
-                    preview_text += f"\n{origem} → {destino}"
-            
-            st.markdown(preview_text)
-        
-        st.divider()
-        
-        # ==================== BOTÃO CRIAR NO N8N ====================
-        col1, col2, col3 = st.columns([2, 2, 1])
-        
-        with col1:
-            criar_btn = st.button(
-                "✨ Criar no N8N",
-                use_container_width=True,
-                type="primary",
-                key="criar_n8n"
-            )
-        
-        with col2:
-            st.button(
-                "🗑️ Descartar",
-                use_container_width=True,
-                key="descartar_btn"
-            )
-        
-        with col3:
-            st.info("Etapa 2/2")
-        
-        if criar_btn:
-            if not n8n_api_key:
-                st.error("❌ Configure a API Key do n8n na sidebar!")
-            else:
-                with st.spinner("📤 Criando agente no n8n..."):
-                    try:
-                        headers = {
-                            "X-N8N-API-KEY": n8n_api_key,
-                            "Content-Type": "application/json"
-                        }
-                        
-                        # Cria o workflow
-                        response = requests.post(
-                            f"{n8n_url.rstrip('/')}/api/v1/workflows",
-                            json=workflow,
-                            headers=headers,
-                            timeout=30
+                    # PASSO 3: Gerar Código (opcional)
+                    codigo = {}
+                    if incluir_codigo:
+                        st.info("📍 Passo 3/4: Gerando código Python...")
+                        codigo = EngenhariaPrompts.gerar_codigo_executavel(
+                            fluxo, prompt, groq_key
                         )
                         
-                        if response.status_code == 201:
-                            agente_info = response.json()
-                            agente_id = agente_info.get("id")
+                        if codigo:
+                            col1, col2 = st.columns(2)
                             
-                            # Ativa o workflow
-                            activate_response = requests.patch(
-                                f"{n8n_url.rstrip('/')}/api/v1/workflows/{agente_id}",
-                                json={"active": True},
-                                headers=headers,
-                                timeout=30
-                            )
+                            with col1:
+                                with st.expander("💻 Classes"):
+                                    for classe, conteudo in codigo.get("classes", {}).items():
+                                        st.code(conteudo, language="python")
                             
-                            if activate_response.status_code == 200:
-                                # Salva no histórico
-                                novo_agente = {
-                                    "id": agente_id,
-                                    "nome": workflow.get("name", "Agente sem nome"),
-                                    "prompt": prompt_usuario,
-                                    "status": "✅ Rodando",
-                                    "criado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                                    "workflow": workflow,
-                                    "n8n_url": f"{n8n_url.rstrip('/')}/workflow/{agente_id}"
-                                }
-                                
-                                st.session_state.agentes.insert(0, novo_agente)
-                                
-                                st.success("🎉 Agente criado e ativado com sucesso!")
-                                st.markdown(f"""
-                                ✅ **Agente {novo_agente['nome']} está rodando!**
-                                
-                                [🔗 Abrir no n8n]({novo_agente['n8n_url']})
-                                """)
-                                st.balloons()
-                                
-                                # Limpa o workflow gerado
-                                st.session_state.workflow_gerado = None
-                                st.session_state.prompt_atual = ""
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error(f"❌ Erro ao ativar: {activate_response.text}")
-                        else:
-                            st.error(f"❌ Erro ao criar: {response.text}")
+                            with col2:
+                                with st.expander("⚙️ Funções"):
+                                    for func, conteudo in codigo.get("funcoes", {}).items():
+                                        st.code(conteudo, language="python")
+                            
+                            with st.expander("📦 Dependências"):
+                                st.code("\n".join(codigo.get("dependencias", [])))
+                            
+                            with st.expander("🚀 Exemplo de Uso"):
+                                st.code(codigo.get("exemplo_uso", ""), language="python")
                     
-                    except requests.exceptions.Timeout:
-                        st.error("❌ Timeout: N8n levou muito tempo para responder")
-                    except requests.exceptions.ConnectionError:
-                        st.error("❌ Erro de conexão: Verifique a URL do n8n")
-                    except Exception as e:
-                        st.error(f"❌ Erro: {str(e)}")
-
-# ==================== TAB 2: MEUS AGENTES ====================
-with tab2:
-    st.header("Seus Agentes Criados")
-    
-    if st.session_state.agentes:
-        # Filtro
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            if st.button("🔄 Atualizar", use_container_width=True):
-                st.rerun()
-        
-        # Lista de agentes
-        for idx, agente in enumerate(st.session_state.agentes):
-            with st.container():
-                col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-                
-                with col1:
-                    st.markdown(f"### {agente['nome']}")
-                    st.caption(f"Criado em: {agente['criado_em']}")
-                
-                with col2:
-                    st.markdown(f"**Status:** {agente['status']}")
-                    st.caption(f"ID: {agente['id'][:8]}...")
-                
-                with col3:
-                    if st.button("👁️ Ver", key=f"ver_{idx}", use_container_width=True):
-                        st.session_state[f"expand_{idx}"] = not st.session_state.get(f"expand_{idx}", False)
-                
-                with col4:
-                    if st.button("🔗 Abrir", key=f"abrir_{idx}", use_container_width=True):
-                        st.markdown(f"[Clique aqui]({agente['n8n_url']})")
-                
-                # Expandir detalhes
-                if st.session_state.get(f"expand_{idx}", False):
+                    # PASSO 4: Gerar Dockerfile (opcional)
+                    if incluir_docker and codigo:
+                        st.info("📍 Passo 4/4: Gerando Dockerfile...")
+                        dockerfile = EngenhariaPrompts.gerar_dockerfile(codigo, groq_key)
+                        
+                        with st.expander("🐳 Dockerfile"):
+                            st.code(dockerfile, language="dockerfile")
+                    
+                    # DOCUMENTAÇÃO
+                    st.info("📍 Gerando documentação...")
+                    docs = EngenhariaPrompts.gerar_documentacao_completa(
+                        analise, fluxo, codigo, prompt, groq_key
+                    )
+                    
+                    with st.expander("📖 Documentação Completa"):
+                        st.markdown(docs)
+                    
+                    # DOWNLOAD
                     st.divider()
+                    st.success("✅ Agente criado com sucesso!")
                     
-                    col1, col2 = st.columns(2)
+                    # Exportar como JSON
+                    export_data = {
+                        "prompt_original": prompt,
+                        "analise": analise,
+                        "fluxo": fluxo,
+                        "codigo": codigo,
+                        "documentacao": docs,
+                        "criado_em": datetime.now().isoformat()
+                    }
+                    
+                    col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.subheader("Prompt Original")
-                        st.write(agente['prompt'])
+                        st.download_button(
+                            "📥 Download JSON",
+                            json.dumps(export_data, indent=2, ensure_ascii=False),
+                            "agente.json",
+                            "application/json",
+                            use_container_width=True
+                        )
                     
                     with col2:
-                        st.subheader("Estatísticas")
-                        workflow = agente['workflow']
-                        st.metric("Nós", len(workflow.get('nodes', [])))
-                        connections = workflow.get('connections', {})
-                        total_conexoes = sum(len(v) for v in connections.values())
-                        st.metric("Conexões", total_conexoes)
+                        if codigo:
+                            main_code = f"""#!/usr/bin/env python3
+'''
+{analise.get('intenção_principal', 'Agente')}
+Gerado automaticamente por AgentAI
+'''
+
+import os
+import logging
+from datetime import datetime
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+{json.dumps(codigo.get('classes', {}), indent=2)}
+
+{json.dumps(codigo.get('funcoes', {}), indent=2)}
+
+if __name__ == "__main__":
+    {codigo.get('exemplo_uso', 'pass')}
+"""
+                            st.download_button(
+                                "💻 Download Python",
+                                main_code,
+                                "agente.py",
+                                "text/plain",
+                                use_container_width=True
+                            )
                     
-                    st.subheader("Estrutura JSON")
-                    with st.expander("Ver JSON completo"):
-                        st.json(agente['workflow'])
-                    
-                    st.divider()
-    else:
-        st.info("Você ainda não criou nenhum agente. Vá para a aba 'Criar Agente' para começar!")
+                    with col3:
+                        st.download_button(
+                            "📚 Download Docs",
+                            docs,
+                            "README.md",
+                            "text/markdown",
+                            use_container_width=True
+                        )
+
+# ==================== TAB 2: DASHBOARD ====================
+
+with tabs[1]:
+    st.header("📊 Dashboard de Agentes")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Agentes Criados", "0", help="Salve agentes para rastrear")
+    with col2:
+        st.metric("Prompts Processados", "0")
+    with col3:
+        st.metric("Código Gerado", "0 linhas")
+    with col4:
+        st.metric("Tempo Economizado", "0 horas")
+    
+    st.info("💡 Salve seus agentes para ver estatísticas aqui")
 
 # ==================== TAB 3: GUIA ====================
-with tab3:
-    st.header("📖 Guia de Uso")
+
+with tabs[2]:
+    st.header("🎓 Guia de Engenharia de Prompts")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Como Começar")
+        st.subheader("✅ Prompts Bons")
         st.markdown("""
-        1. **Configure as chaves de API** na sidebar
-        2. **Descreva seu agente** na aba "Criar Agente"
-        3. **Clique em "Gerar Agente"** para IA criar a estrutura
-        4. **Revise o workflow** gerado
-        5. **Clique em "Criar no N8N"** para ativar
+        **Específico:**
+        "Monitore Bitcoin a cada 5 min, alerta Discord se > $50k"
         
-        ✅ Seu agente está rodando!
+        **Com contexto:**
+        "Leia emails do Gmail, extrai dados, cria tarefas no Asana"
+        
+        **Com integrações:**
+        "Sincronize Shopify → Google Sheets, crie dashboard"
         """)
     
     with col2:
-        st.subheader("Exemplos de Agentes")
+        st.subheader("❌ Prompts Ruins")
         st.markdown("""
-        **Monitoramento:**
-        - Verificar preços de criptomoedas
-        - Monitorar status de sites
-        - Alertar sobre mudanças em preços
+        **Vago:**
+        "Faça algo com dados"
         
-        **Automação:**
-        - Responder emails automaticamente
-        - Postar em redes sociais em horários
-        - Sincronizar dados entre plataformas
+        **Sem integrações:**
+        "Monitore algo"
         
-        **Processamento:**
-        - Processar PDFs e extrair dados
-        - Gerar relatórios automáticos
-        - Converter formatos de arquivo
+        **Ambíguo:**
+        "Crie um agente"
         """)
     
     st.divider()
     
-    col1, col2 = st.columns(2)
+    st.subheader("🎯 Tipos de Agentes Suportados")
     
-    with col1:
-        st.subheader("🔧 Nós Disponíveis")
-        st.markdown("""
-        **Triggers (Iniciam o workflow):**
-        - Schedule (tempo/horário)
-        - Webhook (chamadas HTTP)
-        - Cron (agendamentos complexos)
-        
-        **Integrações:**
-        - Discord, Telegram, Slack
-        - Google Sheets, Gmail
-        - Shopify, WooCommerce
-        - APIs genéricas (HTTP)
-        
-        **Processamento:**
-        - If/Else (condições)
-        - Function (código customizado)
-        - Set (definir dados)
-        """)
+    tipos = {
+        "🔍 Monitoramento": "Verifica mudanças continuamente",
+        "⚙️ Processamento": "Transforma dados",
+        "🔄 Sincronização": "Copia dados entre plataformas",
+        "📢 Notificação": "Envia alertas",
+        "📊 Análise": "Analisa dados e gera insights",
+        "🔗 Integração": "Conecta múltiplos serviços"
+    }
     
-    with col2:
-        st.subheader("💡 Dicas")
-        st.markdown("""
-        ✅ **Faça prompts específicos:**
-        - Inclua frequência (cada 5 min, diariamente)
-        - Mencione ações esperadas
-        - Descreva condições (se preço > $50k)
-        
-        ✅ **Estruture bem:**
-        - Trigger → Processamento → Ação
-        - Uma tarefa por agente
-        - Use nomes descritivos
-        
-        ✅ **Teste antes:**
-        - Verifique credenciais
-        - Teste com dados reais
-        - Monitore primeira execução
-        """)
+    cols = st.columns(2)
+    for i, (tipo, desc) in enumerate(tipos.items()):
+        with cols[i % 2]:
+            st.write(f"**{tipo}** - {desc}")
+
+# ==================== TAB 4: EXEMPLOS ====================
+
+with tabs[3]:
+    st.header("📚 Exemplos de Prompts")
     
-    st.divider()
+    exemplos = [
+        {
+            "titulo": "Bitcoin Monitor",
+            "prompt": "Monitore o preço do Bitcoin a cada 5 minutos usando CoinGecko API. Se passar de $50.000, envie alerta para Discord e salve em Google Sheets.",
+            "tipo": "Monitoramento + Notificação"
+        },
+        {
+            "titulo": "Email to Tasks",
+            "prompt": "Verifique novos emails no Gmail a cada 10 minutos. Para cada email, extraia o assunto e crie uma tarefa no Asana automaticamente.",
+            "tipo": "Processamento + Sincronização"
+        },
+        {
+            "titulo": "Shopify Dashboard",
+            "prompt": "Sincronize novos pedidos do Shopify a cada 30 minutos para uma planilha Google Sheets. Crie colunas para: número, cliente, valor, status, data.",
+            "tipo": "Sincronização"
+        },
+        {
+            "titulo": "Stock Tracker",
+            "prompt": "Monitore ações da Bolsa (PETR4, VALE3) a cada hora. Se cair >5%, envie SMS. Se subir >5%, envie email.",
+            "tipo": "Monitoramento + Análise"
+        },
+        {
+            "titulo": "GitHub Auto-Deploy",
+            "prompt": "Monitore novo push no repo GitHub. Se houver changes em 'main', rode testes, se pass, deploy automático.",
+            "tipo": "Processamento"
+        },
+        {
+            "titulo": "Sentiment Analysis",
+            "prompt": "Monitore tweets com #marca a cada 5 min. Analise sentimento. Se negativo, alerta Slack urgente.",
+            "tipo": "Análise + Notificação"
+        }
+    ]
     
-    st.subheader("❓ Dúvidas Frequentes")
-    
-    with st.expander("Como obtenho as chaves de API?"):
-        st.markdown("""
-        **Claude API Key:**
-        1. Vá para https://console.anthropic.com
-        2. Faça login/criar conta
-        3. Vá em API Keys
-        4. Clique em "Create Key"
-        
-        **N8N API Key:**
-        1. Acesse seu n8n
-        2. Vá em Settings (engrenagem)
-        3. Clique em "API"
-        4. Clique em "Generate API Key"
-        """)
-    
-    with st.expander("Posso editar agentes após criação?"):
-        st.markdown("""
-        Sim! Depois que o agente é criado, você pode:
-        1. Abrir no n8n pelo link
-        2. Editar nós e conexões
-        3. Adicionar/remover nós
-        4. Salvar e ativar novamente
-        """)
-    
-    with st.expander("Quanto custa?"):
-        st.markdown("""
-        - **Claude API:** Pago por uso (tokens)
-        - **N8N:** Dependente da hospedagem
-        - **Streamlit Cloud:** Gratuito
-        
-        Consulte as tabelas de preço oficiais.
-        """)
+    for exemplo in exemplos:
+        with st.expander(f"📌 {exemplo['titulo']} ({exemplo['tipo']})"):
+            st.code(exemplo['prompt'])
+            if st.button(f"▶️ Usar este exemplo", key=exemplo['titulo']):
+                st.session_state.prompt = exemplo['prompt']
+                st.rerun()
 
 # ==================== FOOTER ====================
+
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #888; margin-top: 40px;">
-    <p>🤖 Agent Factory v1.0 | Powered by Claude + N8N</p>
-    <p>Crie agentes incríveis sem escrever uma linha de código</p>
+    <p>🧠 AgentAI v1.0 - Engenharia de Prompts Avançada</p>
+    <p>Crie agentes profissionais com UM prompt | Powered by Groq</p>
+    <p><strong>100% GRÁTIS</strong> | Sem limites | Open Source</p>
 </div>
 """, unsafe_allow_html=True)
