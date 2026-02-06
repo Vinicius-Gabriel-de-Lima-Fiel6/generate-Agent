@@ -42,16 +42,19 @@ def architect_n8n_agent(user_prompt):
 
 # --- COMUNICAÇÃO COM N8N CLOUD ---
 def deploy_to_n8n(blueprint):
-    # Use a URL do Webhook que você copiou do n8n
+    # Pega a URL do Webhook que você colocou nos Secrets
+    # Certifique-se que o nome no Secrets é exatamente N8N_WEBHOOK_URL
     url = st.secrets["N8N_WEBHOOK_URL"] 
     
-    # Não precisa mais da X-N8N-API-KEY aqui, pois é um Webhook aberto
     payload = {
-        "event": "create_agent",
-        "blueprint": blueprint
+        "workflow_name": blueprint.get("name", "Novo Agente"),
+        "blueprint": blueprint,
+        "timestamp": "agora"
     }
     
-    response = requests.post(url, json=payload, headers=headers)
+    # Enviamos sem a variável 'headers' para evitar o NameError
+    # O Webhook do n8n aceita o JSON direto
+    response = requests.post(url, json=payload)
     return response
 
 # --- INTERFACE DO USUÁRIO ---
