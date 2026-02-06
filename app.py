@@ -98,12 +98,12 @@ if init_connections():
                         # 3. Supabase registra no Banco Seguro (RLS)
                         st.write("💾 Registrando no Supabase...")
                         db_data = {
-                            "company_id": company_id,
-                            "nome_agente": blueprint.get("name"),
+                            "company_id": company_id,           # Deve ser um UUID válido ou texto se você mudou o SQL
+                            "nome_agente": blueprint.get("name"), 
                             "objetivo_bruto": user_input,
-                            "n8n_workflow_id": str(wf_id),
-                            "blueprint_json": blueprint
-                        }
+                            "n8n_workflow_id": str(wf_id),      # Certifique-se que wf_id não é None
+                            "blueprint_json": blueprint         # Deve ser um dicionário (JSONB no SQL)
+                                    }
                         st.session_state.supabase.table("agentes").insert(db_data).execute()
                         
                         status.update(label="✅ Agente Ativado com Sucesso!", state="complete")
