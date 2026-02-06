@@ -2,105 +2,134 @@ import streamlit as st
 import requests
 import json
 from groq import Groq
+from supabase import create_client
 
-# --- CONFIGURAÇÃO DE SEGURANÇA ---
-# No Streamlit Cloud, preencha estas chaves em 'Settings > Secrets'
-try:
-    N8N_API_KEY = st.secrets["N8N_API_KEY"]
-    N8N_URL = st.secrets["N8N_URL"] # Ex: https://sua-instancia.app.n8n.cloud/api/v1
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-except Exception:
-    st.error("⚠️ Configure as chaves de API nos Secrets do Streamlit Cloud.")
-    st.stop()
+# --- CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
+def init_connections():
+    try:
+        # Inicializa Clientes
+        st.session_state.groq = Groq(api_key=st.secrets["GROQ_API_KEY"])
+        st.session_state.supabase = create_client(
+            st.secrets["SUPABASE_URL"], 
+            st.secrets["SUPABASE_KEY"]
+        )
+        return True
+    except Exception as e:
+        st.error(f"Erro na configuração: {e}")
+        return False
 
-client = Groq(api_key=GROQ_API_KEY)
+# --- ENGINE DE INTELIGÊNCIA (LLAMA-3.3-70B) ---
+def architect_n8n_agent(user_prompt):
+    system_instruction = """
+    Você é um Arquiteto de Software especializado em n8n.
+    Sua tarefa é converter a ideia do usuário em um JSON compatível com a API do n8n.
 
-# --- ENGINE DE INTELIGÊNCIA ---
-def gerar_blueprint_agente(descricao_usuario):
-    """Transforma a descrição em uma estrutura lógica para o n8n"""
-    
-    prompt_engenharia = f"""
-    Você é um arquiteto de automação n8n. O usuário quer: "{descricao_usuario}"
-    
-    Crie um JSON estrito para um workflow n8n com:
-    1. 'name': Nome curto do agente.
-    2. 'nodes': Lista de objetos com 'type' (ex: n8n-nodes-base.httpRequest, n8n-nodes-base.cron, n8n-nodes-base.emailSend) e 'parameters'.
-    3. 'connections': Mapeie a ligação linear entre os nós.
-    
-    IMPORTANTE: Use apenas tipos de nós oficiais do n8n.
-    Saída: APENAS o JSON cru.
+    REGRAS:
+    1. Identifique o Trigger (n8n-nodes-base.cron para tempo, manualTrigger para botão).
+    2. Adicione os nós lógicos necessários (n8n-nodes-base.httpRequest, n8n-nodes-base.emailSend, etc).
+    3. Retorne APENAS um JSON estruturado com: 'name', 'nodes' e 'connections'.
     """
-
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt_engenharia}],
+    
+    completion = st.session_state.groq.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_prompt}
+        ],
         model="llama-3.3-70b-versatile",
         response_format={"type": "json_object"}
     )
-    return json.loads(chat_completion.choices[0].message.content)
+    return json.loads(completion.choices[0].message.content)
 
-# --- CONEXÃO COM N8N CLOUD ---
-def implantar_no_n8n(workflow_json):
-    """Envia o workflow para a API do n8n Cloud"""
-    endpoint = f"{N8N_URL}/workflows"
+# --- COMUNICAÇÃO COM N8N CLOUD ---
+def deploy_to_n8n(blueprint):
+    url = f"{st.secrets['N8N_URL']}/workflows"
     headers = {
-        "X-N8N-API-KEY": N8N_API_KEY,
+        "X-N8N-API-KEY": st.secrets["N8N_API_KEY"],
         "Content-Type": "application/json"
     }
     
-    # Formatação padrão n8n
     payload = {
-        "name": workflow_json.get("name", "Novo Agente IA"),
-        "nodes": workflow_json.get("nodes", []),
-        "connections": workflow_json.get("connections", {}),
-        "active": True, # Já nasce rodando
+        "name": blueprint.get("name", "Novo Agente Autônomo"),
+        "nodes": blueprint.get("nodes", []),
+        "connections": blueprint.get("connections", {}),
+        "active": True,
         "settings": {"executionOrder": "v1"}
     }
     
-    response = requests.post(endpoint, json=payload, headers=headers)
+    response = requests.post(url, json=payload, headers=headers)
     return response
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="AgenteA - Criador de Agentes", page_icon="🧠")
+# --- INTERFACE DO USUÁRIO ---
+st.set_page_config(page_title="AgenteA | AI Builder", layout="wide")
 
-st.title("🧠 AgenteA")
-st.subheader("Criação de Agentes Autônomos via n8n Cloud")
-
-# Pegar ID da empresa via URL (Integração com seu sistema principal)
-company_id = st.query_params.get("company_id", "default")
-
-with st.container(border=True):
-    user_prompt = st.text_area(
-        "O que o seu agente deve fazer?",
-        placeholder="Ex: Monitore o preço do Bitcoin e me avise no Telegram se baixar de 50k",
-        height=150
-    )
+if init_connections():
+    # Recupera Contexto (Multi-tenant)
+    company_id = st.query_params.get("company_id")
     
-    if st.button("🚀 Gerar e Ativar Agente", type="primary", use_container_width=True):
-        if user_prompt:
-            with st.status("🛠️ Projetando arquitetura...", expanded=True) as status:
-                try:
-                    # 1. IA cria o desenho do workflow
-                    st.write("🤖 IA pensando na lógica...")
-                    blueprint = gerar_blueprint_agente(user_prompt)
-                    
-                    # 2. Envio para o n8n
-                    st.write("📡 Enviando para n8n Cloud...")
-                    resultado = implantar_no_n8n(blueprint)
-                    
-                    if resultado.status_code == 200 or resultado.status_code == 201:
-                        wf_id = resultado.json().get("id")
-                        status.update(label="✅ Agente Ativado com Sucesso!", state="complete")
-                        st.success(f"Agente implantado! ID: {wf_id}")
-                        
-                        # Link direto para o workflow no n8n Cloud
-                        n8n_domain = N8N_URL.replace("/api/v1", "")
-                        st.link_button("⚙️ Ver Agente no n8n", f"{n8n_domain}/workflow/{wf_id}")
-                    else:
-                        status.update(label="❌ Erro na Implantação", state="error")
-                        st.error(f"Erro no n8n: {resultado.text}")
-                except Exception as e:
-                    st.error(f"Erro inesperado: {str(e)}")
-        else:
-            st.warning("Por favor, descreva a ideia do agente.")
+    st.title("🧠 AgenteA")
+    st.caption("Fábrica de Agentes Inteligentes Autônomos")
 
-st.caption(f"Tenant: {company_id} | Powered by Llama-3.3-70B & n8n Cloud")
+    if not company_id:
+        st.warning("⚠️ Atenção: ID da Empresa não detectado. O registro será feito como 'Acesso Público'.")
+        company_id = "00000000-0000-0000-0000-000000000000" # UUID fake para teste
+
+    # UI de Criação
+    with st.container(border=True):
+        st.markdown("### ➕ Descreva a missão do novo agente")
+        user_input = st.text_area(
+            label="O que o sistema deve fazer?",
+            placeholder="Ex: Monitore o preço da soja e me avise no WhatsApp se subir mais de 5%.",
+            height=150
+        )
+        
+        if st.button("🚀 Criar e Ativar Agente", type="primary", use_container_width=True):
+            if user_input:
+                with st.status("🏗️ Gerando infraestrutura...", expanded=True) as status:
+                    # 1. IA projeta o agente
+                    st.write("🧠 Llama-3 projetando workflow...")
+                    blueprint = architect_n8n_agent(user_input)
+                    
+                    # 2. n8n implanta na nuvem
+                    st.write("📡 Enviando para n8n Cloud...")
+                    n8n_res = deploy_to_n8n(blueprint)
+                    
+                    if n8n_res.status_code in [200, 201]:
+                        wf_data = n8n_res.json()
+                        wf_id = wf_data.get("id")
+                        
+                        # 3. Supabase registra no Banco Seguro (RLS)
+                        st.write("💾 Registrando no Supabase...")
+                        db_data = {
+                            "company_id": company_id,
+                            "nome_agente": blueprint.get("name"),
+                            "objetivo_bruto": user_input,
+                            "n8n_workflow_id": str(wf_id),
+                            "blueprint_json": blueprint
+                        }
+                        st.session_state.supabase.table("agentes").insert(db_data).execute()
+                        
+                        status.update(label="✅ Agente Ativado com Sucesso!", state="complete")
+                        st.balloons()
+                        
+                        st.success(f"Agente '{blueprint.get('name')}' está agora trabalhando para você.")
+                        st.info(f"ID do Workflow: {wf_id}")
+                    else:
+                        st.error(f"Erro no n8n Cloud: {n8n_res.text}")
+            else:
+                st.warning("Por favor, descreva sua ideia.")
+
+    st.divider()
+    
+    # Visualização de Agentes Ativos (Simulação de Dashboard)
+    st.subheader("🤖 Agentes Ativos")
+    try:
+        resp = st.session_state.supabase.table("agentes").select("*").eq("company_id", company_id).execute()
+        if resp.data:
+            for ag in resp.data:
+                with st.expander(f"Agente: {ag['nome_agente']} (Criado em: {ag['criado_em'][:10]})"):
+                    st.write(f"**Objetivo:** {ag['objetivo_bruto']}")
+                    st.caption(f"Status: {ag['status']} | n8n ID: {ag['n8n_workflow_id']}")
+        else:
+            st.info("Nenhum agente criado para esta empresa ainda.")
+    except:
+        st.info("Conecte-se via Dashboard Principal para ver seus agentes.")
