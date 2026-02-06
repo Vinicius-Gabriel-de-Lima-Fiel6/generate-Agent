@@ -40,7 +40,7 @@ Analise o prompt do usuário e retorne um JSON com:
 Retorne APENAS o JSON, sem explicações."""
         
         response = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="Llama-3.3-70B-Versatile",
             max_tokens=1500,
             system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
