@@ -1,45 +1,50 @@
 import time
-import datetime
+import os
+from groq import Groq
 from supabase import create_client
 
-# Configuração (Use variáveis de ambiente)
-supabase = create_client("SUA_URL", "SUA_KEY")
+# Configurações (Use st.secrets ou variáveis de ambiente)
+client = Groq(api_key="SUA_CHAVE_GROQ")
+supabase = create_client("URL_SUPABASE", "KEY_SUPABASE")
 
-def logica_do_agente(agente):
-    """
-    Aqui é onde a mágica acontece. 
-    Como você não quer IA agora, aqui você usa regras de código:
-    Se template == 'Monitor', faça X.
-    Se template == 'Relatório', faça Y.
-    """
-    print(f"[{datetime.datetime.now()}] Processando Agente: {agente['name']}")
+def executar_agente_ia(agente):
+    print(f"🤖 IA processando agente: {agente['name']}")
     
-    # Exemplo de lógica baseada no prompt (Parser Simples)
-    if "email" in agente['prompt_config'].lower():
-        print(f"-> Simulando envio de e-mail conforme prompt: {agente['prompt_config']}")
-    
-    # Atualiza o timestamp de última execução
-    supabase.table("agents").update({
-        "last_run": datetime.datetime.now().isoformat()
-    }).eq("id", agente['id']).execute()
+    # Prompt de Sistema (Invisível ao usuário) que define o comportamento
+    system_prompt = f"""
+    Você é um agente autônomo da empresa {agente['company_id']}.
+    Sua tarefa é seguir a configuração do usuário: {agente['prompt_config']}
+    Responda de forma executiva e direta. Se precisar simular uma ação, descreva-a.
+    """
 
-def iniciar_motor():
-    print("🚀 Motor de Agentes Python Iniciado (Sem n8n)...")
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": system_prompt}],
+            temperature=0.5,
+            max_tokens=1024
+        )
+        
+        resposta = completion.choices[0].message.content
+        
+        # Salva o resultado no banco para o usuário ver no Streamlit
+        supabase.table("agents").update({
+            "last_result": resposta,
+            "last_run": "now()"
+        }).eq("id", agente['id']).execute()
+        
+    except Exception as e:
+        print(f"Erro na Groq: {e}")
+
+def loop_principal():
     while True:
-        try:
-            # Busca agentes que estão ativos
-            res = supabase.table("agents").select("*").eq("status", "active").execute()
-            agentes = res.data
-
-            for ag in agentes:
-                logica_do_agente(ag)
+        # Busca agentes ativos que não rodaram nos últimos 10 minutos (exemplo)
+        agentes = supabase.table("agents").select("*").eq("status", "active").execute().data
+        
+        for ag in agentes:
+            executar_agente_ia(ag)
             
-            # Frequência de verificação (ex: a cada 30 segundos)
-            time.sleep(30)
-            
-        except Exception as e:
-            print(f"❌ Erro no motor: {e}")
-            time.sleep(10)
+        time.sleep(60) # Intervalo entre ciclos
 
 if __name__ == "__main__":
-    iniciar_motor()
+    loop_principal()
