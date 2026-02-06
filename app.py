@@ -1,58 +1,33 @@
 import streamlit as st
 from supabase import create_client
 
-# Configuração de conexão
-try:
-    supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-except:
-    st.error("Configure as chaves do Supabase no .streamlit/secrets.toml")
+supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-st.set_page_config(page_title="AI Agent SaaS", layout="wide")
+st.title("🚀 Construtor de Agentes Recorrentes")
 
-st.title("🤖 Gerenciador de Agentes IA")
-
-tab1, tab2 = st.tabs(["📋 Meus Agentes", "✨ Novo Agente"])
-
-with tab2:
-    st.subheader("Configurar novo agente autônomo")
-    templates = supabase.table("agent_templates").select("*").execute().data
-    
-    with st.form("form_create"):
-        nome_agente = st.text_input("Nome do Agente", placeholder="Ex: Meu Consultor de Vendas")
-        template_escolhido = st.selectbox("Escolha um Modelo", [t['name'] for t in templates])
-        instrucao = st.text_area("Descreva o que esse agente deve fazer por você:")
+with st.expander("➕ Criar Nova Automação"):
+    with st.form("agente_form"):
+        nome = st.text_input("Nome da Tarefa")
+        freq = st.selectbox("Frequência", ["diario", "mensal", "anual"])
+        config = st.text_area("O que o agente deve fazer?")
         
-        if st.form_submit_button("✅ Ativar Agente"):
+        if st.form_submit_button("Ligar Agente"):
             supabase.table("agents").insert({
-                "company_id": "cliente_01",
-                "name": nome_agente,
-                "prompt_config": f"Modelo: {template_escolhido}. Instrução: {instrucao}",
+                "name": nome,
+                "frequency": freq,
+                "prompt_config": config,
+                "company_id": "meu_saas",
                 "status": "active"
             }).execute()
-            st.success("Agente ativado! O motor está processando sua solicitação.")
-            st.rerun()
+            st.success(f"Agente {freq} ativado!")
 
-with tab1:
-    agentes = supabase.table("agents").select("*").order("created_at", desc=True).execute().data
-    
-    for ag in agentes:
-        with st.container():
-            # Cabeçalho do Agente
-            c1, c2, c3 = st.columns([3, 1, 1])
-            c1.subheader(f"🤖 {ag['name']}")
-            status_text = "🟢 ATIVO" if ag['status'] == 'active' else "🔴 PAUSADO"
-            c2.write(f"Status: **{status_text}**")
-            
-            if c3.button("Pausar/Ativar", key=ag['id']):
-                novo_status = "paused" if ag['status'] == "active" else "active"
-                supabase.table("agents").update({"status": novo_status}).eq("id", ag['id']).execute()
-                st.rerun()
+# Listagem com contagem regressiva (Simulada)
+st.subheader("📋 Agentes em Operação")
+agentes = supabase.table("agents").select("*").execute().data
 
-            # Resultado da IA
-            if ag['last_result']:
-                st.markdown("**Último Processamento (Llama 3.3):**")
-                st.info(ag['last_result'])
-            else:
-                st.warning("⏳ Aguardando processamento pelo motor...")
-            
-            st.divider()
+for ag in agentes:
+    col1, col2 = st.columns([3, 1])
+    col1.write(f"**{ag['name']}** ({ag['frequency']})")
+    col2.write(f"Próxima: {ag['next_run'][:10] if ag['next_run'] else 'Agendando...'}")
+    if ag['last_result']:
+        st.info(f"Último resultado: {ag['last_result'][:100]}...")
