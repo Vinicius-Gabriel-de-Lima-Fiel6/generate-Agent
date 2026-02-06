@@ -1,50 +1,58 @@
 import time
-import os
 from groq import Groq
 from supabase import create_client
+import datetime
 
-# Configurações (Use st.secrets ou variáveis de ambiente)
-client = Groq(api_key="SUA_CHAVE_GROQ")
-supabase = create_client("URL_SUPABASE", "KEY_SUPABASE")
+# Setup
+# Substitua pelas suas chaves ou use variáveis de ambiente
+GROQ_API_KEY = "SUA_CHAVE_GROQ"
+SUPABASE_URL = "SUA_URL"
+SUPABASE_KEY = "SUA_KEY"
 
-def executar_agente_ia(agente):
-    print(f"🤖 IA processando agente: {agente['name']}")
+groq_client = Groq(api_key=GROQ_API_KEY)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def rodar_motor():
+    print("🚀 Motor de IA Iniciado. Monitorando agentes ativos...")
     
-    # Prompt de Sistema (Invisível ao usuário) que define o comportamento
-    system_prompt = f"""
-    Você é um agente autônomo da empresa {agente['company_id']}.
-    Sua tarefa é seguir a configuração do usuário: {agente['prompt_config']}
-    Responda de forma executiva e direta. Se precisar simular uma ação, descreva-a.
-    """
-
-    try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": system_prompt}],
-            temperature=0.5,
-            max_tokens=1024
-        )
-        
-        resposta = completion.choices[0].message.content
-        
-        # Salva o resultado no banco para o usuário ver no Streamlit
-        supabase.table("agents").update({
-            "last_result": resposta,
-            "last_run": "now()"
-        }).eq("id", agente['id']).execute()
-        
-    except Exception as e:
-        print(f"Erro na Groq: {e}")
-
-def loop_principal():
     while True:
-        # Busca agentes ativos que não rodaram nos últimos 10 minutos (exemplo)
-        agentes = supabase.table("agents").select("*").eq("status", "active").execute().data
-        
-        for ag in agentes:
-            executar_agente_ia(ag)
+        try:
+            # 1. Busca agentes ativos que ainda não têm resultado ou precisam de atualização
+            res = supabase.table("agents").select("*").eq("status", "active").execute()
+            agentes = res.data
+
+            for ag in agentes:
+                # Evita re-processar se já rodou recentemente (ex: nos últimos 5 min)
+                # Para o teste ser "funcional de fato", vamos rodar se o result estiver vazio
+                if not ag['last_result']:
+                    print(f"⚙️ Processando: {ag['name']}")
+                    
+                    prompt_sistema = "Você é um consultor B2B sênior. Responda de forma prática e acionável."
+                    
+                    completion = groq_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": prompt_sistema},
+                            {"role": "user", "content": ag['prompt_config']}
+                        ],
+                        temperature=0.7,
+                    )
+                    
+                    resultado = completion.choices[0].message.content
+                    
+                    # 2. Devolve o resultado pro Supabase
+                    supabase.table("agents").update({
+                        "last_result": resultado,
+                        "last_run": datetime.datetime.now().isoformat()
+                    }).eq("id", ag['id']).execute()
+                    
+                    print(f"✅ Agente {ag['name']} atualizado.")
+
+            time.sleep(10) # Checa o banco a cada 10 segundos
             
-        time.sleep(60) # Intervalo entre ciclos
+        except Exception as e:
+            print(f"❌ Erro no loop: {e}")
+            time.sleep(20)
 
 if __name__ == "__main__":
-    loop_principal()
+    rodar_motor()
