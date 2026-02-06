@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-groq_client = Groq()
+groq_client = Groq("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")
 
 # ==================== SISTEMA DE ENGENHARIA DE PROMPTS ====================
 
