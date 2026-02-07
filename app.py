@@ -1,57 +1,72 @@
 import streamlit as st
-from supabase import create_client
-from core import get_llm_response
-import os
+from database import fetch_agents
+from core import orchestrator_router, get_llm_stream
 
-# Configuração da página
-st.set_page_config(page_title="AI Multi-Agent SaaS", layout="wide")
+st.set_page_config(page_title="AI Agent SaaS", layout="wide")
 
-# Conectar ao Supabase (Via Secrets no Streamlit Cloud)
-supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+# Sidebar para simular Multi-tenancy
+st.sidebar.title("🏢 Painel do Cliente")
+org_id = st.sidebar.text_input("Organization ID", value="69792690-3773-455b-9d41-47754972e0b5") 
 
-st.title("🤖 Orchestrator SaaS")
+if not org_id:
+    st.warning("Por favor, insira o Organization ID configurado no Supabase.")
+    st.stop()
 
-# Simulação de Contexto Multi-tenant (Em prod, vem do login)
-org_id = st.sidebar.text_input("ID da Organização Cliente", value="default-org")
-
-# Sidebar: Lista de Agentes desta Org
-st.sidebar.header("Seus Agentes")
-agents_res = supabase.table("agents").select("*").eq("organization_id", org_id).execute()
-agents = agents_res.data
+# Carregar agentes da organização
+agents = fetch_agents(org_id)
 
 if not agents:
-    st.info("Crie seu primeiro agente no Supabase para começar!")
-else:
-    selected_agent_name = st.sidebar.selectbox("Agente Ativo", [a['name'] for a in agents])
-    agent = next(a for a in agents if a['name'] == selected_agent_name)
-    st.sidebar.caption(f"Role: {agent['role']} | Model: {agent['model_name']}")
+    st.info("Nenhum agente encontrado para esta organização. Verifique o ID ou a tabela no Supabase.")
+    st.stop()
 
-# Chat
+st.sidebar.success(f"{len(agents)} agentes carregados.")
+
+# Interface de Chat
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Mostrar histórico
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-if prompt := st.chat_input("Como posso ajudar?"):
+# Input do Usuário
+if prompt := st.chat_input("O que deseja saber?"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        # Chamada ao Core (Groq/Gemini)
-        response_stream = get_llm_response(agent, st.session_state.messages)
-        
+    # Lógica do Orquestrador
+    with st.status("IA Orquestradora analisando sua solicitação...") as status:
+        try:
+            target_agent_id = orchestrator_router(prompt, agents)
+            # Encontra o agente pelo ID retornado pelo Llama
+            agent = next((a for a in agents if a['id'] == target_agent_id), agents[0])
+            status.update(label=f"Agente Ativado: **{agent['name']}**", state="complete")
+        except Exception as e:
+            status.update(label="Usando agente padrão...", state="error")
+            agent = agents[0]
+
+    # Gerar Resposta Final
+    with st.chat_message("assistant", avatar="🤖"):
+        response_placeholder = st.empty()
         full_response = ""
-        placeholder = st.empty()
         
-        for chunk in response_stream:
-            # Tratamento de chunk conforme o provedor
-            content = chunk.choices[0].delta.content if agent['provider'] == 'groq' else chunk.text
-            if content:
-                full_response += content
-                placeholder.markdown(full_response + "▌")
-        
-        placeholder.markdown(full_response)
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        try:
+            stream = get_llm_stream(agent, st.session_state.messages)
+            
+            for chunk in stream:
+                if agent['provider'] == 'groq':
+                    content = chunk.choices[0].delta.content
+                else:
+                    content = chunk.text
+                
+                if content:
+                    full_response += content
+                    response_placeholder.markdown(full_response + "▌")
+            
+            response_placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+        except Exception as e:
+            st.error(f"Erro na geração da resposta: {e}")
